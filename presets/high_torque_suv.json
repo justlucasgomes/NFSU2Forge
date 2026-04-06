@@ -1,0 +1,41 @@
+{
+  "name": "High Torque SUV",
+  "description": "Maximum torque build optimised for heavy SUVs. Tuned final drive and stiffer suspension to handle the extra power without losing composure on straights.",
+  "author": "NFSU2 Car Tuning",
+  "version": "1.0",
+  "tags": ["suv", "torque", "muscle", "straight-line"],
+  "engine": {
+    "max_torque": 650.0,
+    "max_power": 320.0,
+    "redline_rpm": 5500.0
+  },
+  "transmission": {
+    "final_drive": 4.10,
+    "shift_time": 0.22
+  },
+  "chassis": {
+    "center_of_mass_y": -0.06
+  },
+  "tyres": {
+    "front_grip": 1.00,
+    "rear_grip": 0.98,
+    "lateral_grip": 0.95,
+    "front_slip_angle": 8.0,
+    "rear_slip_angle": 10.0
+  },
+  "brakes": {
+    "front_bias": 0.58,
+    "power": 5000.0
+  },
+  "handling": {
+    "steering_lock": 28.0,
+    "roll_stiffness": 1.4,
+    "suspension_stiffness_f": 28.0,
+    "suspension_stiffness_r": 26.0,
+    "damping_front": 4200.0,
+    "damping_rear": 3800.0
+  },
+  "aero": {
+    "drag_coefficient": 0.42
+  }
+}

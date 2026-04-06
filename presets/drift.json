@@ -1,0 +1,34 @@
+{
+  "name": "Drift Setup",
+  "description": "Loose rear end for maximum drift potential. Reduced rear grip, softened rear suspension, and aggressive steering lock make it easy to initiate and maintain slides.",
+  "author": "NFSU2 Car Tuning",
+  "version": "1.0",
+  "tags": ["drift", "oversteer", "competition"],
+  "engine": {},
+  "transmission": {
+    "shift_time": 0.12,
+    "final_drive": 4.2
+  },
+  "chassis": {
+    "center_of_mass_y": -0.08
+  },
+  "tyres": {
+    "front_grip": 1.10,
+    "rear_grip": 0.72,
+    "lateral_grip": 0.85,
+    "front_slip_angle": 10.0,
+    "rear_slip_angle": 6.0
+  },
+  "brakes": {
+    "front_bias": 0.75
+  },
+  "handling": {
+    "steering_lock": 40.0,
+    "roll_stiffness": 0.8,
+    "suspension_stiffness_f": 22.0,
+    "suspension_stiffness_r": 12.0,
+    "damping_front": 3600.0,
+    "damping_rear": 2200.0
+  },
+  "aero": {}
+}

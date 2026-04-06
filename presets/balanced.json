@@ -1,0 +1,30 @@
+{
+  "name": "Balanced",
+  "description": "Well-rounded build suitable for all race types. Slightly stiffer suspension and improved tyre grip for consistent performance across circuit, sprint, and drift events.",
+  "author": "NFSU2 Car Tuning",
+  "version": "1.0",
+  "tags": ["balanced", "all-around", "circuit"],
+  "engine": {},
+  "transmission": {
+    "shift_time": 0.18
+  },
+  "chassis": {},
+  "tyres": {
+    "front_grip": 1.05,
+    "rear_grip": 1.02,
+    "lateral_grip": 1.04,
+    "front_slip_angle": 9.0,
+    "rear_slip_angle": 11.0
+  },
+  "brakes": {
+    "front_bias": 0.62
+  },
+  "handling": {
+    "roll_stiffness": 1.1,
+    "suspension_stiffness_f": 18.0,
+    "suspension_stiffness_r": 16.0,
+    "damping_front": 3200.0,
+    "damping_rear": 2800.0
+  },
+  "aero": {}
+}
