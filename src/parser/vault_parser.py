@@ -150,11 +150,15 @@ class VaultParser:
 
     def get_car_list(self) -> list[dict]:
         """
-        Return metadata for all known NFSU2 playable cars,
-        sorted alphabetically by display name.
+        Return metadata for all NFSU2 cars that have a confirmed binary
+        block in GlobalB.lzc (i.e. present in CAR_IDENTIFIERS),
+        sorted by class then display name.
         """
+        from src.parser.bun_parser import CAR_IDENTIFIERS
         result = []
         for car_id, cp in NFSU2_CAR_DATABASE.items():
+            if car_id not in CAR_IDENTIFIERS:
+                continue
             result.append({
                 "id": car_id,
                 "name": cp.display_name,
@@ -162,7 +166,7 @@ class VaultParser:
                 "class": cp.car_class,
                 "drive": cp.drive_type,
             })
-        return sorted(result, key=lambda x: x["name"])
+        return sorted(result, key=lambda x: (x["class"], x["name"]))
 
     def get_car_physics(self, car_id: str) -> Optional[CarPhysics]:
         """

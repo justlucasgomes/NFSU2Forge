@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NFSU2 Car Tuning Tool - Main Entry Point
+NFSU2Forge - Main Entry Point
 A professional mod tool for Need for Speed Underground 2.
 """
 import sys
@@ -19,10 +19,10 @@ from src.ui.main_window import MainWindow
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setApplicationName("NFSU2 Car Tuning")
+    app.setApplicationName("NFSU2Forge")
     app.setApplicationVersion("1.0.0")
-    app.setOrganizationName("NFSU2Mods")
-    app.setOrganizationDomain("github.com/nfsu2-car-tuning")
+    app.setOrganizationName("Lucas Gomes")
+    app.setOrganizationDomain("github.com/justlucasgomes/NFSU2Forge")
 
     # Apply dark stylesheet
     style_path = Path(__file__).parent / "assets" / "styles" / "dark_theme.qss"

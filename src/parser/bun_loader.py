@@ -58,9 +58,23 @@ class BunLoader:
     def patch_float(self, offset: int, value: float) -> None:
         struct.pack_into("<f", self._data, offset, value)
 
+    # Car physics blocks are confirmed to live in this address range.
+    _CAR_BLOCK_START = 0xC60000
+    _CAR_BLOCK_END   = 0xC80000
+
     def find_identifier(self, identifier: bytes) -> int:
-        """Return offset of first occurrence of *identifier* in the file, or -1."""
-        return self._data.find(identifier)
+        """Return offset of *identifier* inside the car-block region, or -1.
+
+        Restricts the search to [_CAR_BLOCK_START, _CAR_BLOCK_END) to avoid
+        false positives from identical byte sequences elsewhere in the file
+        (e.g. the 'TT' string that appears at 0x005D03EE before the real Audi
+        TT physics block at 0xC6C820).
+        """
+        region = memoryview(self._data)[self._CAR_BLOCK_START:self._CAR_BLOCK_END]
+        rel = bytes(region).find(identifier)
+        if rel == -1:
+            return -1
+        return self._CAR_BLOCK_START + rel
 
     @property
     def loaded(self) -> bool:

@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QLabel, QHBoxLayout
 )
 from PySide6.QtCore import Signal, Qt
+from src.i18n.translations import tr
 
 
 _CLASS_ICONS = {
@@ -35,9 +36,9 @@ class Sidebar(QWidget):
         header.setObjectName("sidebarHeader")
         hl = QVBoxLayout(header)
         hl.setContentsMargins(12, 12, 12, 8)
-        title = QLabel("VEHICLES")
-        title.setObjectName("sidebarTitle")
-        hl.addWidget(title)
+        self._title_lbl = QLabel(tr("vehicles"))
+        self._title_lbl.setObjectName("sidebarTitle")
+        hl.addWidget(self._title_lbl)
         layout.addWidget(header)
 
         # Search box
@@ -46,7 +47,7 @@ class Sidebar(QWidget):
         sl = QVBoxLayout(search_container)
         sl.setContentsMargins(8, 6, 8, 6)
         self._search = QLineEdit()
-        self._search.setPlaceholderText("Search cars...")
+        self._search.setPlaceholderText(tr("search_placeholder"))
         self._search.setObjectName("searchBox")
         self._search.textChanged.connect(self._filter)
         sl.addWidget(self._search)
@@ -82,7 +83,9 @@ class Sidebar(QWidget):
                 f"Drive: {car.get('drive', '—')}"
             )
             self._list.addItem(item)
-        self._count_label.setText(f"{len(cars)} car{'s' if len(cars) != 1 else ''}")
+        n = len(cars)
+        key = "cars_count_plural" if n != 1 else "cars_count_singular"
+        self._count_label.setText(tr(key, n=n))
 
     def _filter(self, text: str) -> None:
         q = text.lower()
@@ -103,3 +106,11 @@ class Sidebar(QWidget):
     def current_car_id(self) -> str | None:
         item = self._list.currentItem()
         return item.data(Qt.UserRole) if item else None
+
+    def refresh_language(self) -> None:
+        self._title_lbl.setText(tr("vehicles"))
+        self._search.setPlaceholderText(tr("search_placeholder"))
+        # Re-render count label
+        n = self._list.count()
+        key = "cars_count_plural" if n != 1 else "cars_count_singular"
+        self._count_label.setText(tr(key, n=n))

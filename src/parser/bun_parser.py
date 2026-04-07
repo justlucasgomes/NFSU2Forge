@@ -34,7 +34,10 @@ FIELD_DEFS: dict[str, tuple] = {
     "cog_height":    (0x02c8, "CoG Height",    0.10, 1.50, 3, 0.010, "m",   "Center-of-gravity height"),
 
     # ── Engine ─────────────────────────────────────────────────────────────
-    "turbo_boost":   (0x0238, "Turbo Boost",   0.0,  2.5,  3, 0.050, "bar", "Boost pressure  (0 = naturally aspirated)"),
+    # NOTE: turbo_boost was removed — offset +0x0238 is actually gear 5 of a
+    # secondary (stock) gear table at +0x0228, not boost pressure.
+    # The real forced-induction flag lives at +0x0210 (0.0=NA, 0.5/1.0=turbo),
+    # but it appears to be a category flag rather than a continuous pressure value.
     "peak_rpm":      (0x0244, "Peak RPM",    2000, 12000,   0, 100.0, "RPM", "RPM at peak power"),
     "max_rpm":       (0x0248, "Max RPM",     3000, 14000,   0, 100.0, "RPM", "Rev limiter / redline"),
     "torque_0":      (0x0250, "Torque pt 0",   0.0,  2.0,  4, 0.005, "",    "Normalized torque — RPM point 0 (idle)"),
@@ -48,10 +51,15 @@ FIELD_DEFS: dict[str, tuple] = {
     "torque_8":      (0x0270, "Torque pt 8",   0.0,  2.0,  4, 0.005, "",    "Normalized torque — RPM point 8 (high)"),
 
     # ── Transmission ───────────────────────────────────────────────────────
-    "gear_1":        (0x0164, "Gear 1",   0.5, 10.0, 4, 0.010, "",    "1st gear ratio  (higher = shorter/more torque)"),
-    "gear_2":        (0x0168, "Gear 2",   0.5,  6.0, 4, 0.010, "",    "2nd gear ratio"),
-    "gear_3":        (0x016c, "Gear 3",   0.3,  5.0, 4, 0.010, "",    "3rd gear ratio"),
-    "gear_4":        (0x0170, "Gear 4",   0.3,  4.0, 4, 0.010, "",    "4th gear ratio"),
+    # Real full gear set confirmed at +0x03C8 (supports up to 6 gears).
+    # Slot 7 (+0x03E0) = reverse gear (~0.8000) — not exposed.
+    # +0x0218 is an INTEGER storing the actual gear count (4, 5, or 6).
+    "gear_1":        (0x03c8, "Gear 1",   0.5, 10.0, 4, 0.010, "",    "1st gear ratio  (higher = shorter/more torque)"),
+    "gear_2":        (0x03cc, "Gear 2",   0.5,  6.0, 4, 0.010, "",    "2nd gear ratio"),
+    "gear_3":        (0x03d0, "Gear 3",   0.3,  5.0, 4, 0.010, "",    "3rd gear ratio"),
+    "gear_4":        (0x03d4, "Gear 4",   0.3,  4.0, 4, 0.010, "",    "4th gear ratio"),
+    "gear_5":        (0x03d8, "Gear 5",   0.0,  3.0, 4, 0.010, "",    "5th gear ratio"),
+    "gear_6":        (0x03dc, "Gear 6",   0.0,  2.0, 4, 0.010, "",    "6th gear ratio"),
 
     # ── Handling ───────────────────────────────────────────────────────────
     "grip_front":    (0x0064, "Front Grip",     0.3, 2.0, 4, 0.005, "",  "Front lateral grip coefficient"),
@@ -69,35 +77,56 @@ NEGATIVE_FIELDS = {"grip_rear"}
 # ── Car identifier → binary search bytes ──────────────────────────────────
 # Maps the NFSU2_CAR_DATABASE car_id to the bytes to search for in GlobalB.lzc.
 # Matched against the first occurrence (which is the primary identifier block).
+#
+# Notes:
+#  - "TT" uses 8 null bytes to avoid false positive at 0x000DEA6D
+#  - "RX7" needs no null (RX8 differs at char 3)
+#  - "GTO\x00" avoids matching unrelated strings
+#  - LANCER and LANCEREVO8 share the same physics block (LANCEREVO8)
+#  - NEON/S2000/IMPREZA do not have standalone blocks in GlobalB.lzc
 CAR_IDENTIFIERS: dict[str, bytes] = {
-    "NAVIGATOR":  b"NAVIGATOR",
-    "ESCALADE":   b"ESCALADE",
-    "HUMMER":     b"HUMMER",
-    "TIBURON":    b"TIBURON",
-    "SENTRA":     b"SENTRA",
-    "CELICA":     b"CELICA",
-    "IS300":      b"IS300",
-    "SUPRA":      b"SUPRA",
-    "GOLF":       b"GOLF\x00",
-    "AUDI_TT":    b"AUDI",
-    "240SX":      b"240SX",
-    "SKYLINE":    b"SKYLINE",
-    "RX7":        b"RX7",
-    "MUSTANG":    b"MUSTANG",
-    "CORSA":      b"CORSA",
-    "PEUGEOT_206": b"PEUGOT\x00",
+    # ── Tuners ─────────────────────────────────────────────────────────────
+    "240SX":       b"240SX",
+    "CIVIC":       b"CIVIC",
+    "ECLIPSE":     b"ECLIPSE",
+    "RSX":         b"RSX",
+    "SENTRA":      b"SENTRA",
+    "LANCER":      b"LANCEREVO8",   # shares block with EVO — no standalone LANCER block
+    "TIBURON":     b"TIBURON",
+    "TT":          b"TT\x00\x00\x00\x00\x00\x00\x00\x00",  # long pattern avoids false positive
+    "A3":          b"A3\x00",
+    "GOLF":        b"GOLF\x00",     # null avoids matching GOLFR32
+    "CELICA":      b"CELICA",
+    "FOCUS":       b"FOCUS",
+    "COROLLA":     b"COROLLA",
+    "PEUGEOT_206": b"PEUGOT\x00",   # null avoids matching PEUGOT106
     "PEUGEOT_106": b"PEUGOT106",
-    "350Z":       b"350Z",
-    "EVO":        b"EVO",
-    "WRX":        b"WRX",
-    "SILVIA":     b"SILVIA",
-    "ECLIPSE":    b"ECLIPSE",
-    "GTO":        b"GTO",
-    "MAZDA3":     b"MAZDA3",
-    "COBALT":     b"COBALT",
-    "GOLF_R32":   b"GOLFR32",
-    "LANCER":     b"LANCER",
+    "CORSA":       b"CORSA",
+    # ── Sport ──────────────────────────────────────────────────────────────
+    "350Z":        b"350Z",
+    "3000GT":      b"3000GT",
+    "G35":         b"G35\x00",
+    "IS300":       b"IS300",
+    "RX8":         b"RX8",
+    "MIATA":       b"MIATA",
+    "RX7":         b"RX7\x00",      # null avoids matching RX8 if order changes
+    "SKYLINE":     b"SKYLINE",
+    "SUPRA":       b"SUPRA",
+    # ── Muscle ─────────────────────────────────────────────────────────────
+    "MUSTANGGT":   b"MUSTANGGT",
+    "GTO":         b"GTO\x00",
+    # ── Exotic ─────────────────────────────────────────────────────────────
+    "IMPREZAWRX":  b"IMPREZAWRX",
+    "LANCEREVO8":  b"LANCEREVO8",
+    # ── SUV ────────────────────────────────────────────────────────────────
+    "ESCALADE":    b"ESCALADE",
+    "HUMMER":      b"HUMMER",
+    "NAVIGATOR":   b"NAVIGATOR",
 }
+
+
+# Offset of the gear-count integer (uint32) relative to manufacturer base.
+_GEAR_COUNT_OFFSET = 0x0218
 
 
 @dataclass
@@ -106,6 +135,7 @@ class CarBinaryData:
     car_id: str
     base_offset: int                    # absolute offset of manufacturer string
     values: dict[str, float] = field(default_factory=dict)
+    gear_count: int = 4                 # actual gear count from binary integer at +0x0218
 
     def get(self, field_name: str, default: float = 0.0) -> float:
         return self.values.get(field_name, default)
@@ -156,9 +186,16 @@ class BunParser:
             # Expose absolute value for negative-stored fields
             values[fname] = abs(raw) if fname in NEGATIVE_FIELDS else raw
 
-        cbd = CarBinaryData(car_id=car_id, base_offset=base, values=values)
+        # Read gear count from confirmed integer offset
+        import struct as _struct
+        data_bytes = self._loader._data
+        raw_gc = _struct.unpack_from("<I", data_bytes, base + _GEAR_COUNT_OFFSET)[0]
+        gear_count = int(raw_gc) if 3 <= raw_gc <= 7 else 4
+
+        cbd = CarBinaryData(car_id=car_id, base_offset=base, values=values,
+                            gear_count=gear_count)
         self._cache[car_id] = cbd
-        log.debug("BunParser: read %s @ base=0x%X", car_id, base)
+        log.debug("BunParser: read %s @ base=0x%X  gears=%d", car_id, base, gear_count)
         return cbd
 
     def write_car(self, data: CarBinaryData) -> None:

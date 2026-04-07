@@ -24,6 +24,7 @@ from PySide6.QtGui import QFont, QColor, QPainter, QPen
 from src.models.car_data import CarPhysics
 from src.ui.widgets.param_widget import ParamWidget
 from src.parser.bun_parser import BunParser, CarBinaryData, FIELD_DEFS
+from src.i18n.translations import tr
 
 
 # ── Stat bar ──────────────────────────────────────────────────────────────
@@ -82,16 +83,12 @@ class _Placeholder(QWidget):
         icon.setStyleSheet("font-size: 56px;")
         layout.addWidget(icon)
 
-        title = QLabel("NFSU2 Car Tuning")
+        title = QLabel(tr("welcome_title"))
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ff8c00;")
         layout.addWidget(title)
 
-        msg = QLabel(
-            "1 · Open <b>GlobalB.lzc</b> from the toolbar\n"
-            "2 · Select a car from the list\n"
-            "3 · Edit parameters and click <b>Write</b>"
-        )
+        msg = QLabel(tr("welcome_msg"))
         msg.setAlignment(Qt.AlignCenter)
         msg.setStyleSheet("color: #888; font-size: 12px; line-height: 1.8;")
         msg.setWordWrap(True)
@@ -120,11 +117,11 @@ class EditorPanel(QWidget):
     # Field groups displayed in the 2×2 grid
     _GROUPS = {
         "Chassis":      ["mass_tonnes", "brake_force", "cog_height"],
-        "Engine":       ["turbo_boost", "peak_rpm", "max_rpm",
+        "Engine":       ["peak_rpm", "max_rpm",
                          "torque_0", "torque_1", "torque_2", "torque_3",
                          "torque_4", "torque_5", "torque_6", "torque_7",
                          "torque_8"],
-        "Gearbox":      ["gear_1", "gear_2", "gear_3", "gear_4"],
+        "Gearbox":      ["gear_1", "gear_2", "gear_3", "gear_4", "gear_5", "gear_6"],
         "Handling":     ["grip_front", "grip_rear", "steer_lock",
                          "susp_spring_f", "susp_damp_f",
                          "susp_spring_r", "susp_damp_r"],
@@ -254,11 +251,18 @@ class EditorPanel(QWidget):
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
 
-        group_order = ["Chassis", "Engine", "Gearbox", "Handling"]
-        positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
-        for (row, col), name in zip(positions, group_order):
-            grp = _make_group(name, self._GROUPS[name], self._params)
+        group_order = [
+            ("Chassis",  "group_chassis",  (0, 0)),
+            ("Engine",   "group_engine",   (0, 1)),
+            ("Gearbox",  "group_gearbox",  (1, 0)),
+            ("Handling", "group_handling", (1, 1)),
+        ]
+        self._groups: dict[str, QGroupBox] = {}
+        for name, tr_key, (row, col) in group_order:
+            grp = _make_group(tr(tr_key), self._GROUPS[name], self._params)
+            grp.setProperty("tr_key", tr_key)
             grid.addWidget(grp, row, col)
+            self._groups[name] = grp
 
         scroll.setWidget(grid_w)
 
@@ -277,9 +281,9 @@ class EditorPanel(QWidget):
         layout.setSpacing(10)
 
         # Reset
-        self._reset_btn = QPushButton("↺  Reset")
+        self._reset_btn = QPushButton(tr("btn_reset"))
         self._reset_btn.setObjectName("secondaryBtn")
-        self._reset_btn.setFixedWidth(90)
+        self._reset_btn.setFixedWidth(110)
         self._reset_btn.setToolTip("Reload values from file (discard edits)")
         self._reset_btn.clicked.connect(self._reload_car)
         layout.addWidget(self._reset_btn)
@@ -293,11 +297,11 @@ class EditorPanel(QWidget):
         layout.addWidget(self._dirty_lbl)
 
         # Write button
-        self._write_btn = QPushButton("💾  Write to GlobalB.lzc")
+        self._write_btn = QPushButton(tr("btn_write"))
         self._write_btn.setObjectName("saveBtn")
-        self._write_btn.setFixedWidth(220)
+        self._write_btn.setFixedWidth(240)
         self._write_btn.setFixedHeight(38)
-        self._write_btn.setToolTip("Save all changes to GlobalB.lzc (auto-backup created)")
+        self._write_btn.setToolTip(tr("write_file_tip"))
         self._write_btn.clicked.connect(self.save_requested.emit)
         layout.addWidget(self._write_btn)
 
@@ -337,13 +341,18 @@ class EditorPanel(QWidget):
             self._write_btn.setEnabled(False)
             return
 
+        # Gear count read from confirmed binary integer (+0x0218)
+        n_gears = self._data.gear_count
         self._info_strip.setText(
             f"base 0x{self._data.base_offset:08X}  ·  "
-            f"GlobalB.lzc  ·  {len(self._params)} confirmed fields"
+            f"{n_gears}{tr('speed_gearbox')}  ·  {len(self._params)} {tr('editable_fields')}"
         )
         self._set_params_enabled(True)
         self._write_btn.setEnabled(True)
         self._dirty_lbl.setText("")
+
+        # Show/hide gear slots based on actual gear count from binary
+        self._update_gear_visibility(n_gears)
 
         self._building = True
         for fname, pw in self._params.items():
@@ -354,13 +363,20 @@ class EditorPanel(QWidget):
         for pw in self._params.values():
             pw.setEnabled(enabled)
 
+    def _update_gear_visibility(self, n_gears: int) -> None:
+        """Show only the gear slots this car actually has."""
+        for i in range(1, 7):
+            fname = f"gear_{i}"
+            if fname in self._params:
+                self._params[fname].setVisible(i <= n_gears)
+
     # ── Field edit handler ─────────────────────────────────────────────────
     def _on_field_changed(self, field_name: str, value: float) -> None:
         if self._building or self._data is None:
             return
         self._data.values[field_name] = value
         self._parser.write_car(self._data)
-        self._dirty_lbl.setText("● unsaved changes")
+        self._dirty_lbl.setText(tr("dirty_label"))
         if self._current_car_id:
             self.binary_changed.emit(self._current_car_id, self._data)
 
@@ -369,3 +385,14 @@ class EditorPanel(QWidget):
         if self._current_car_id:
             self.load_car(self._current_car_id, None)
             self._dirty_lbl.setText("")
+
+    # ── Language refresh ───────────────────────────────────────────────────
+    def refresh_language(self) -> None:
+        """Re-apply translations to all dynamic UI elements."""
+        self._reset_btn.setText(tr("btn_reset"))
+        self._write_btn.setText(tr("btn_write"))
+        self._write_btn.setToolTip(tr("write_file_tip"))
+        for name, grp in self._groups.items():
+            key = grp.property("tr_key")
+            if key:
+                grp.setTitle(tr(key))

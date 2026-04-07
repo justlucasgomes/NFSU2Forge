@@ -1,71 +1,72 @@
 """
-Main application window.
+Main application window — NFS2Forge.
+
+Flow:
+  1. User clicks "Open GlobalB.lzc"
+  2. BunLoader + BunParser initialise
+  3. Sidebar is populated from the cars found in the binary
+  4. User selects a car → EditorPanel loads live binary values
+  5. User edits → in-memory patch applied immediately
+  6. User clicks Write → auto-backup, then file written to disk
 """
 from __future__ import annotations
 import logging
 from pathlib import Path
+
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QMainWindow, QWidget, QHBoxLayout,
     QFileDialog, QMessageBox, QStatusBar, QToolBar, QLabel, QSplitter,
-    QSizePolicy
+    QSizePolicy, QComboBox
 )
 from PySide6.QtCore import Qt, QSettings
-from PySide6.QtGui import QAction, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QKeySequence
 
-from src.parser.exe_loader import ExeLoader, ExeValidationError
-from src.parser.vault_parser import VaultParser
 from src.parser.bun_loader import BunLoader, BunValidationError
 from src.parser.bun_parser import BunParser
-from src.core.backup_manager import BackupManager
-from src.core.preset_manager import PresetManager
-from src.core.save_manager import SaveManager, SaveError
-from src.models.car_data import CarPhysics
+from src.models.car_data import NFSU2_CAR_DATABASE
+from src.i18n.translations import tr, set_language, get_language, AVAILABLE_LANGUAGES
 
 from src.ui.sidebar import Sidebar
 from src.ui.editor_panel import EditorPanel
 
 log = logging.getLogger(__name__)
 
+APP_VERSION = "1.1.0"
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self._loader: ExeLoader | None = None
-        self._vault: VaultParser | None = None
-        self._backup: BackupManager | None = None
-        self._save_mgr: SaveManager | None = None
-        self._preset_mgr = PresetManager()
-        self._pending_changes: dict[str, CarPhysics] = {}
         self._bun_loader: BunLoader | None = None
         self._bun_parser: BunParser | None = None
         self._bun_dirty: bool = False
 
-        self._settings = QSettings("NFSU2Mods", "NFSU2CarTuning")
+        self._settings = QSettings("NFSU2Mods", "NFS2Forge")
+        # Restore saved language before building UI
+        saved_lang = self._settings.value("language", "en")
+        set_language(saved_lang)
         self._build_ui()
         self._restore_geometry()
 
-    # ──────────────────────────────────────────────────────────────────────
+    # ── UI construction ────────────────────────────────────────────────────
+
     def _build_ui(self) -> None:
-        self.setWindowTitle("NFSU2 Car Tuning  —  No file loaded")
+        self.setWindowTitle(f"NFS2Forge v{APP_VERSION}  —  No file loaded")
         self.setMinimumSize(1100, 700)
 
-        # Status bar
         self._status = QStatusBar()
         self.setStatusBar(self._status)
-        self._status_label = QLabel("Open SPEED2.EXE to begin")
+        self._status_label = QLabel(tr("status_ready"))
         self._status.addWidget(self._status_label)
 
-        # Toolbar
         self._build_toolbar()
 
-        # Central widget
         central = QWidget()
         self.setCentralWidget(central)
-        main_layout = QHBoxLayout(central)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        layout = QHBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Splitter: sidebar | editor
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(1)
         splitter.setObjectName("mainSplitter")
@@ -75,19 +76,13 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._sidebar)
 
         self._editor = EditorPanel()
-        self._editor.set_preset_manager(self._preset_mgr)
-        self._editor.physics_changed.connect(self._on_physics_changed)
         self._editor.binary_changed.connect(self._on_binary_changed)
-        self._editor.save_requested.connect(self._on_save)
+        self._editor.save_requested.connect(self._on_save_bun)
         splitter.addWidget(self._editor)
 
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-
-        main_layout.addWidget(splitter)
-
-        # Welcome overlay
-        self._show_welcome()
+        layout.addWidget(splitter)
 
     def _build_toolbar(self) -> None:
         tb = QToolBar("Main")
@@ -95,184 +90,73 @@ class MainWindow(QMainWindow):
         tb.setMovable(False)
         self.addToolBar(tb)
 
-        # Open EXE
-        open_action = QAction("Open SPEED2.EXE", self)
-        open_action.setShortcut(QKeySequence.Open)
-        open_action.setStatusTip("Load SPEED2.EXE from your NFSU2 game folder")
-        open_action.triggered.connect(self._on_open)
-        tb.addAction(open_action)
-
-        # Open BUN
-        open_bun_action = QAction("Open GlobalB.lzc", self)
-        open_bun_action.setStatusTip(
-            "Load GlobalB.lzc to enable per-car binary editing (Binary Patch tab)"
-        )
-        open_bun_action.triggered.connect(self._on_open_bun)
-        tb.addAction(open_bun_action)
+        self._open_bun_action = QAction(tr("open_file"), self)
+        self._open_bun_action.setShortcut(QKeySequence.Open)
+        self._open_bun_action.setStatusTip(tr("open_file_tip"))
+        self._open_bun_action.triggered.connect(self._on_open_bun)
+        tb.addAction(self._open_bun_action)
 
         tb.addSeparator()
 
-        # Backup
-        self._backup_action = QAction("Create Backup", self)
-        self._backup_action.setStatusTip("Create a timestamped backup of SPEED2.EXE")
-        self._backup_action.setEnabled(False)
-        self._backup_action.triggered.connect(self._on_backup)
-        tb.addAction(self._backup_action)
-
-        # Restore
-        self._restore_action = QAction("Restore Backup", self)
-        self._restore_action.setStatusTip("Restore the most recent backup")
-        self._restore_action.setEnabled(False)
-        self._restore_action.triggered.connect(self._on_restore)
-        tb.addAction(self._restore_action)
-
-        tb.addSeparator()
-
-        # Save EXE
-        self._save_action = QAction("Write to EXE", self)
-        self._save_action.setShortcut(QKeySequence.Save)
-        self._save_action.setStatusTip("Write all pending changes to SPEED2.EXE")
-        self._save_action.setEnabled(False)
-        self._save_action.triggered.connect(self._on_save)
-        tb.addAction(self._save_action)
-
-        # Save BUN
-        self._save_bun_action = QAction("Write to GlobalB.lzc", self)
-        self._save_bun_action.setStatusTip("Write Binary Patch changes to GlobalB.lzc")
+        self._save_bun_action = QAction(tr("write_file"), self)
+        self._save_bun_action.setShortcut(QKeySequence.Save)
+        self._save_bun_action.setStatusTip(tr("write_file_tip"))
         self._save_bun_action.setEnabled(False)
         self._save_bun_action.triggered.connect(self._on_save_bun)
         tb.addAction(self._save_bun_action)
 
         tb.addSeparator()
 
-        # Spacer
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         tb.addWidget(spacer)
 
-        # About
-        about_action = QAction("About", self)
-        about_action.triggered.connect(self._on_about)
-        tb.addAction(about_action)
+        # Language selector
+        lang_label = QLabel(f"  {tr('language')}: ")
+        lang_label.setObjectName("langLabel")
+        tb.addWidget(lang_label)
 
-    def _show_welcome(self) -> None:
-        self._set_status("Ready — open SPEED2.EXE to begin editing.")
+        self._lang_combo = QComboBox()
+        self._lang_combo.setObjectName("langCombo")
+        self._lang_combo.setFixedWidth(145)
+        for code, name in AVAILABLE_LANGUAGES.items():
+            self._lang_combo.addItem(name, code)
+        # Set current
+        idx = self._lang_combo.findData(get_language())
+        if idx >= 0:
+            self._lang_combo.setCurrentIndex(idx)
+        self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
+        tb.addWidget(self._lang_combo)
 
-    # ──────────────────────────────────────────────────────────────────────
-    # File operations
-    # ──────────────────────────────────────────────────────────────────────
+        tb.addSeparator()
 
-    def _on_open(self) -> None:
-        last_dir = self._settings.value("last_exe_dir", "")
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Open SPEED2.EXE",
-            str(last_dir),
-            "Executables (SPEED2.EXE *.exe);;All Files (*)"
-        )
-        if not path:
-            return
+        self._about_action = QAction(tr("about"), self)
+        self._about_action.triggered.connect(self._on_about)
+        tb.addAction(self._about_action)
 
-        exe_path = Path(path)
-        self._settings.setValue("last_exe_dir", str(exe_path.parent))
+    # ── File operations ────────────────────────────────────────────────────
 
-        try:
-            loader = ExeLoader(exe_path)
-            loader.load()
-        except ExeValidationError as exc:
-            QMessageBox.critical(self, "Invalid File", str(exc))
-            return
-        except Exception as exc:
-            QMessageBox.critical(self, "Load Error", f"Failed to load EXE:\n{exc}")
-            return
+    def _on_language_changed(self, _index: int) -> None:
+        code = self._lang_combo.currentData()
+        set_language(code)
+        self._settings.setValue("language", code)
+        self._apply_language()
 
-        self._loader = loader
-        self._vault = VaultParser(loader)
-        self._backup = BackupManager(exe_path)
-        self._save_mgr = SaveManager(loader, self._vault, self._backup)
-        self._pending_changes.clear()
-
-        # Enable actions
-        self._backup_action.setEnabled(True)
-        self._restore_action.setEnabled(True)
-        self._save_action.setEnabled(True)
-
-        # Load car list
-        cars = self._vault.get_car_list()
-        self._sidebar.populate(cars)
-        self._sidebar.select_first()
-
-        self.setWindowTitle(f"NFSU2 Car Tuning  —  {exe_path.name}")
-        self._set_status(f"Loaded: {exe_path}  |  {len(cars)} cars available")
-
-    def _on_backup(self) -> None:
-        if self._backup is None:
-            return
-        try:
-            path = self._backup.create_backup()
-            self._set_status(f"Backup created: {path.name}")
-            QMessageBox.information(self, "Backup Created",
-                                    f"Backup saved to:\n{path}")
-        except Exception as exc:
-            QMessageBox.critical(self, "Backup Failed", str(exc))
-
-    def _on_restore(self) -> None:
-        if self._save_mgr is None:
-            return
-        reply = QMessageBox.question(
-            self, "Restore Backup",
-            "This will overwrite SPEED2.EXE with the most recent backup.\n"
-            "All unsaved changes will be lost. Continue?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if reply != QMessageBox.Yes:
-            return
-        success = self._save_mgr.restore_backup()
-        if success:
-            self._set_status("Backup restored successfully.")
-            QMessageBox.information(self, "Restored", "Backup restored successfully.")
-        else:
-            QMessageBox.warning(self, "Restore Failed",
-                                "No backup found, or restore failed.")
-
-    def _on_save(self) -> None:
-        if self._save_mgr is None:
-            return
-        if not self._pending_changes:
-            self._set_status("No changes to save.")
-            return
-
-        # Auto-backup on first save
-        try:
-            backup_path = self._save_mgr.ensure_backup()
-            log.info("Auto-backup before save: %s", backup_path)
-        except Exception as exc:
-            QMessageBox.critical(self, "Backup Failed",
-                                 f"Could not create backup before saving:\n{exc}\n\n"
-                                 "Save aborted for safety.")
-            return
-
-        try:
-            written, skipped = self._save_mgr.save(self._pending_changes)
-            self._pending_changes.clear()
-            msg = (f"Saved successfully.\n\n"
-                   f"- {written} global field(s) written to EXE\n"
-                   f"- {skipped} field(s) skipped (per-car offsets pending RE)")
-            self._set_status(f"Saved: {written} fields written, {skipped} pending.")
-            QMessageBox.information(self, "Save Complete", msg)
-        except SaveError as exc:
-            QMessageBox.critical(self, "Save Error", str(exc))
-        except Exception as exc:
-            QMessageBox.critical(self, "Save Error",
-                                 f"An unexpected error occurred:\n{exc}")
-
-    # ──────────────────────────────────────────────────────────────────────
-    # Car selection & editing
-    # ──────────────────────────────────────────────────────────────────────
+    def _apply_language(self) -> None:
+        """Refresh all translatable UI strings after a language change."""
+        self._open_bun_action.setText(tr("open_file"))
+        self._open_bun_action.setStatusTip(tr("open_file_tip"))
+        self._save_bun_action.setText(tr("write_file"))
+        self._save_bun_action.setStatusTip(tr("write_file_tip"))
+        self._about_action.setText(tr("about"))
+        self._status_label.setText(tr("status_ready"))
+        self._editor.refresh_language()
+        self._sidebar.refresh_language()
 
     def _on_open_bun(self) -> None:
         last_dir = self._settings.value("last_bun_dir", "")
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open GlobalB.lzc",
+            self, tr("open_file"),
             str(last_dir),
             "LZC Files (GlobalB.lzc *.lzc);;All Files (*)"
         )
@@ -286,10 +170,11 @@ class MainWindow(QMainWindow):
             loader = BunLoader(bun_path)
             loader.load()
         except BunValidationError as exc:
-            QMessageBox.critical(self, "Invalid File", str(exc))
+            QMessageBox.critical(self, tr("invalid_file_title"), str(exc))
             return
         except Exception as exc:
-            QMessageBox.critical(self, "Load Error", f"Failed to load GlobalB.lzc:\n{exc}")
+            QMessageBox.critical(self, tr("load_error_title"),
+                                 tr("load_error_body", err=exc))
             return
 
         self._bun_loader = loader
@@ -299,59 +184,78 @@ class MainWindow(QMainWindow):
         self._save_bun_action.setEnabled(True)
         self._editor.set_bun_parser(self._bun_parser)
 
-        # Reload current car so Binary Patch tab populates immediately
-        if self._vault is not None:
-            sidebar_selection = self._sidebar.current_car_id()
-            if sidebar_selection:
-                self._on_car_selected(sidebar_selection)
+        # Populate sidebar with cars found in this binary
+        cars = self._build_car_list()
+        self._sidebar.populate(cars)
+        self._sidebar.select_first()
 
+        self.setWindowTitle(f"NFS2Forge v{APP_VERSION}  —  {bun_path.name}")
         self._set_status(
-            f"GlobalB.lzc loaded: {bun_path.name}  "
-            f"·  Binary Patch tab now active"
+            f"Loaded: {bun_path}  ·  {len(cars)} {tr('cars_available')}"
         )
+
+    def _build_car_list(self) -> list[dict]:
+        """Return sidebar-ready dicts for all cars found in the loaded binary."""
+        if self._bun_parser is None:
+            return []
+        found_ids = self._bun_parser.supported_car_ids()
+        result = []
+        for car_id in found_ids:
+            cp = NFSU2_CAR_DATABASE.get(car_id)
+            if cp is None:
+                # Fallback for cars in binary but not in DB
+                result.append({
+                    "id": car_id,
+                    "name": car_id,
+                    "manufacturer": "",
+                    "class": "Unknown",
+                    "drive": "",
+                })
+            else:
+                result.append({
+                    "id": car_id,
+                    "name": cp.display_name,
+                    "manufacturer": cp.manufacturer,
+                    "class": cp.car_class,
+                    "drive": cp.drive_type,
+                })
+        return sorted(result, key=lambda x: (x["class"], x["name"]))
 
     def _on_save_bun(self) -> None:
         if self._bun_loader is None:
             return
         try:
             bak = self._bun_loader.create_backup()
-            log.info("BUN auto-backup: %s", bak)
         except Exception as exc:
-            QMessageBox.critical(self, "Backup Failed",
-                                 f"Could not create backup:\n{exc}\n\nSave aborted.")
+            QMessageBox.critical(self, tr("backup_failed_title"),
+                                 tr("backup_failed_body", err=exc))
             return
         try:
             self._bun_loader.save()
             self._bun_dirty = False
-            self._save_bun_action.setText("Write to GlobalB.lzc")
-            self._set_status(f"GlobalB.lzc saved  ·  backup → {bak.name}")
-            QMessageBox.information(self, "Saved",
-                                    f"GlobalB.lzc written successfully.\nBackup: {bak.name}")
+            self._save_bun_action.setText(tr("write_file"))
+            self._set_status(f"{tr('status_saved')}  ·  {tr('status_backup')} → {bak.name}")
+            QMessageBox.information(self, tr("saved_title"),
+                                    tr("saved_body", bak=bak.name))
         except Exception as exc:
-            QMessageBox.critical(self, "Save Error", str(exc))
+            QMessageBox.critical(self, tr("save_error_title"), str(exc))
 
-    def _on_binary_changed(self, car_id: str, data) -> None:
-        self._bun_dirty = True
-        self._save_bun_action.setText("Write to GlobalB.lzc  *")
-        self._set_status(f"Binary changes pending — {car_id}  ·  click 'Write to GlobalB.lzc' to save")
+    # ── Car selection ──────────────────────────────────────────────────────
 
     def _on_car_selected(self, car_id: str) -> None:
-        if self._vault is None:
-            return
-        physics = self._vault.get_car_physics(car_id)
-        if physics is None:
-            return
-        self._editor.load_car(car_id, physics)
-        self._set_status(f"Editing: {physics.display_name}")
+        cp = NFSU2_CAR_DATABASE.get(car_id)
+        self._editor.load_car(car_id, cp)
+        name = cp.display_name if cp else car_id
+        self._set_status(f"{tr('status_editing')}: {name}")
 
-    def _on_physics_changed(self, car_id: str, physics: CarPhysics) -> None:
-        self._pending_changes[car_id] = physics
-        self._vault.mark_dirty(car_id, physics)
-        self._set_status(f"Unsaved changes: {len(self._pending_changes)} car(s) modified")
+    def _on_binary_changed(self, car_id: str, _data) -> None:
+        self._bun_dirty = True
+        self._save_bun_action.setText(f"{tr('write_file')}  *")
+        cp = NFSU2_CAR_DATABASE.get(car_id)
+        name = cp.display_name if cp else car_id
+        self._set_status(f"{tr('status_unsaved')} — {name}")
 
-    # ──────────────────────────────────────────────────────────────────────
-    # Helpers
-    # ──────────────────────────────────────────────────────────────────────
+    # ── Helpers ────────────────────────────────────────────────────────────
 
     def _set_status(self, message: str) -> None:
         self._status_label.setText(message)
@@ -359,16 +263,15 @@ class MainWindow(QMainWindow):
 
     def _on_about(self) -> None:
         QMessageBox.about(
-            self, "About NFSU2 Car Tuning",
-            "<h3>NFSU2 Car Tuning v1.0.0</h3>"
-            "<p>A professional mod tool for Need for Speed Underground 2.</p>"
-            "<p>Edits vehicle physics data stored in SPEED2.EXE.</p>"
-            "<p><b>Confirmed EXE offsets:</b> Global physics block (0x38D75C), "
-            "Engine defaults (0x3885BC), Steering (0x3844D0).<br>"
-            "Per-car offsets are pending further reverse engineering &mdash; "
-            "contributions welcome on GitHub.</p>"
+            self, f"About NFS2Forge v{APP_VERSION}",
+            f"<h3>NFS2Forge v{APP_VERSION}</h3>"
+            "<p>Car physics editor for <b>Need for Speed Underground 2</b>.</p>"
+            "<p>Directly patches <code>GlobalB.lzc</code> using confirmed binary offsets "
+            "for all 32 playable cars.</p>"
+            "<p><b>Fields:</b> Mass · Brakes · CoG · Turbo · RPM · Torque curve (9 pts) "
+            "· Gears 1–6 · Grip · Steering · Suspension</p>"
             "<p>&copy; 2024 &middot; MIT License &middot; "
-            "<a href='https://github.com/nfsu2-car-tuning'>GitHub</a></p>"
+            "<a href='https://github.com/YOUR_USERNAME/NFS2Forge'>GitHub</a></p>"
         )
 
     def _restore_geometry(self) -> None:
@@ -379,11 +282,9 @@ class MainWindow(QMainWindow):
             self.resize(1280, 800)
 
     def closeEvent(self, event) -> None:
-        if self._pending_changes:
+        if self._bun_dirty:
             reply = QMessageBox.question(
-                self, "Unsaved Changes",
-                f"You have unsaved changes to {len(self._pending_changes)} car(s).\n"
-                "Close without saving?",
+                self, tr("unsaved_title"), tr("unsaved_body"),
                 QMessageBox.Yes | QMessageBox.No
             )
             if reply != QMessageBox.Yes:

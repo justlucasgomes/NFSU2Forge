@@ -329,17 +329,7 @@ _register(_car(
     accel=4, spd=4, hdl=6, brk=5, drift=4,
 ))
 
-_register(_car(
-    "NEON", "Dodge Neon SRT-4", "Dodge", 2003,
-    "Tuner", "FWD", "2.4T",
-    mass=1312.0, com_y=-0.10,
-    torque=332.0, power=186.0, max_rpm=6400.0, idle_rpm=750.0, redline=6200.0,
-    gear_ratios=[2.950, 1.942, 1.354, 1.031, 0.819], final_drive=3.940,
-    f_grip=1.04, r_grip=0.90,
-    steer_lock=35.0, susp_f=20.0, susp_r=18.0,
-    drag=0.35, top_speed=205.0,
-    accel=7, spd=5, hdl=5, brk=6, drift=5,
-))
+# NEON removed — no physics block found in GlobalB.lzc
 
 _register(_car(
     "TIBURON", "Hyundai Tiburon GT", "Hyundai", 2003,
@@ -535,17 +525,7 @@ _register(_car(
     accel=5, spd=4, hdl=9, brk=7, drift=8,
 ))
 
-_register(_car(
-    "S2000", "Honda S2000", "Honda", 2002,
-    "Sport", "RWD", "F20C",
-    mass=1254.0, com_y=-0.13,
-    torque=208.0, power=177.0, max_rpm=9000.0, idle_rpm=800.0, redline=8800.0,
-    gear_ratios=[3.133, 2.045, 1.481, 1.161, 0.970], final_drive=4.100,
-    f_grip=1.10, r_grip=1.05,
-    steer_lock=34.0, susp_f=20.0, susp_r=18.0,
-    drag=0.31, top_speed=235.0,
-    accel=7, spd=7, hdl=9, brk=8, drift=7,
-))
+# S2000 removed — no physics block found in GlobalB.lzc
 
 _register(_car(
     "RX7", "Mazda RX-7 FD", "Mazda", 1997,
@@ -635,17 +615,7 @@ _register(_car(
     accel=8, spd=7, hdl=9, brk=9, drift=6,
 ))
 
-_register(_car(
-    "IMPREZA", "Subaru Impreza", "Subaru", 2003,
-    "Sport", "AWD", "EJ20",
-    mass=1375.0, com_y=-0.11,
-    torque=186.0, power=116.0, max_rpm=6400.0, idle_rpm=750.0, redline=6200.0,
-    gear_ratios=[3.454, 1.947, 1.296, 0.972, 0.738], final_drive=3.900,
-    f_grip=1.10, r_grip=1.06,
-    steer_lock=34.0, susp_f=18.0, susp_r=16.0,
-    drag=0.35, top_speed=195.0,
-    accel=5, spd=5, hdl=7, brk=6, drift=4,
-))
+# IMPREZA removed — only IMPREZAWRX has a standalone block in GlobalB.lzc
 
 # ─── SUV ────────────────────────────────────────────────────────────────────
 
