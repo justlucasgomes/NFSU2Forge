@@ -31,7 +31,7 @@ from src.ui.editor_panel import EditorPanel
 
 log = logging.getLogger(__name__)
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.0.0"
 
 
 class MainWindow(QMainWindow):
@@ -271,7 +271,7 @@ class MainWindow(QMainWindow):
             "<p><b>Fields:</b> Mass · Brakes · CoG · Turbo · RPM · Torque curve (9 pts) "
             "· Gears 1–6 · Grip · Steering · Suspension</p>"
             "<p>&copy; 2024 &middot; MIT License &middot; "
-            "<a href='https://github.com/YOUR_USERNAME/NFS2Forge'>GitHub</a></p>"
+            "<a href='https://github.com/justlucasgomes/NFSU2Forge'>GitHub</a></p>"
         )
 
     def _restore_geometry(self) -> None:
