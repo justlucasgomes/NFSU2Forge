@@ -57,7 +57,7 @@
 
 **[⬇ Download latest release](../../releases/latest)**
 
-Extract the zip and run `NFS2Forge.exe`. No installation required.
+Extract the zip and run `NFSU2Forge.exe`. No installation required.
 
 ---
 
@@ -66,7 +66,7 @@ Extract the zip and run `NFS2Forge.exe`. No installation required.
 ### ⚠️ Step 0 — Backup your files first!
 
 Before doing anything, **manually copy `GlobalB.lzc` somewhere safe**.
-NFS2Forge creates automatic backups on every save, but a manual copy is always the safest insurance.
+NFSU2Forge creates automatic backups on every save, but a manual copy is always the safest insurance.
 
 Your `GlobalB.lzc` is located in your NFSU2 install folder:
 ```
@@ -79,7 +79,7 @@ C:\Program Files (x86)\Steam\steamapps\common\Need For Speed Underground 2\GLOBA
 
 ### Step 1 — Open GlobalB.lzc
 
-1. Launch **NFS2Forge.exe**
+1. Launch **NFSU2Forge.exe**
 2. Click **"Open GlobalB.lzc"** in the toolbar
 3. Navigate to your NFSU2 `GLOBAL\` folder and select the file
 
