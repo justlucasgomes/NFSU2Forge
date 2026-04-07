@@ -1,4 +1,4 @@
-# NFS2Forge — The Underground 2 Car Physics Editor
+# NFSU2Forge — The Underground 2 Car Physics Editor
 
 > A professional mod tool for **Need for Speed Underground 2** that lets you edit per-car physics directly in `GlobalB.lzc` — no hex editor required.
 
